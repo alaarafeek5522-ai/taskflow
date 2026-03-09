@@ -1,0 +1,64 @@
+name: TaskFlow Build
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: 'Build type'
+        required: true
+        default: 'apk'
+        type: choice
+        options: [apk, appbundle]
+      flavor:
+        description: 'Flavor'
+        required: true
+        default: 'release'
+        type: choice
+        options: [release, debug]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.22.0'
+          channel: 'stable'
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      - name: Generate launcher icons
+        run: flutter pub run flutter_launcher_icons
+
+      - name: Build APK
+        if: ${{ github.event.inputs.build_type == 'apk' || github.event_name == 'push' }}
+        run: flutter build apk --${{ github.event.inputs.flavor || 'release' }} --split-per-abi
+
+      - name: Build AppBundle
+        if: ${{ github.event.inputs.build_type == 'appbundle' }}
+        run: flutter build appbundle --${{ github.event.inputs.flavor || 'release' }}
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: taskflow-apk
+          path: build/app/outputs/flutter-apk/*.apk
+          retention-days: 7
+
+      - name: Upload AAB
+        if: ${{ github.event.inputs.build_type == 'appbundle' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: taskflow-aab
+          path: build/app/outputs/bundle/**/*.aab
+          retention-days: 7
